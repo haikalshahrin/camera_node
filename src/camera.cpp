@@ -33,6 +33,9 @@
  *
  ***********************************************************************************/
 #include <opencv2/opencv.hpp>
+#include <opencv2/videio.hpp>
+using namespace cv;
+
 #include <ros/ros.h>
 #include <std_msgs/String.h>
 #include <sensor_msgs/Image.h>
