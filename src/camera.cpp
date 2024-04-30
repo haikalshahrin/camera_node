@@ -847,56 +847,44 @@ void WriteImage(Mat &img, string filestr, int file_counter)
 /**************************************************************
  * Thread to capture camera images
  **************************************************************/
-void* CaptureImages(void* param)
-{
-  ROS_DEBUG_STREAM("Capture Thread started");
-  Options *opt = (Options*)param;
+void* CaptureImages(void* param) {
+    ROS_DEBUG_STREAM("Capture Thread started");
 
-  // locate serial port
-  string port = FindCameraDevice(opt->usb_hwid);
-  if (port == "")
-  {
-    ROS_ERROR_STREAM("No camera - exit thread");
-    pthread_exit(NULL);
-  }
-  ROS_DEBUG_STREAM("Camera found on port " << port);
+    // Open the video capture for both cameras
+    cv::VideoCapture capLeft("/dev/video0");  // Left camera
+    cv::VideoCapture capRight("/dev/video1"); // Right camera
 
-  // setting both inter_byte_timeout and read_timeout_constant
-  // enables thread suspension between bursts of data
-  serial::Camera camera(port, 115200, serial::Timeout(100,100,0,250,0));
-  ROS_DEBUG_STREAM("Camera port configured");
-
-  if (!camera.isOpen())
-  {
-    ROS_ERROR_STREAM("Unable to open port " << port);
-    pthread_exit(NULL);
-  }
-  ROS_DEBUG_STREAM("Camera port opened");
-
-  // configure camera parameters
-  camera.Configure(opt->camconfig);
-  ROS_DEBUG_STREAM("Camera initialized");
-
-  Mat imgR(opt->camconfig.n_lines, camera.MAX_IMAGE_WIDTH, CV_8UC1, Scalar(0));
-  Mat imgL(opt->camconfig.n_lines, camera.MAX_IMAGE_WIDTH, CV_8UC1, Scalar(0));
-
-  ROS_DEBUG_STREAM("streaming...");
-  // capture loop
-  while(1)
-  {
-    if (camera.RecvLine(imgR, imgL) == 0)
-    {
-      pthread_mutex_lock(&imgCopyMutex);
-      image_cap_time = ros::Time::now();
-      imgR.copyTo(imageR);
-      imgL.copyTo(imageL);
-      got_camera_frame = true;
-      pthread_mutex_unlock(&imgCopyMutex);
+    if (!capLeft.isOpened() || !capRight.isOpened()) {
+        ROS_ERROR_STREAM("Failed to open camera streams.");
+        return nullptr;
     }
 
-  }
+    ROS_INFO_STREAM("Camera streams opened successfully");
 
+    Mat imgL, imgR;
+
+    while (ros::ok()) {
+        capLeft >> imgL;   // Capture a frame from the left camera
+        capRight >> imgR;  // Capture a frame from the right camera
+
+        if (imgL.empty() || imgR.empty()) {
+            ROS_ERROR("Empty frames captured.");
+            break;
+        }
+
+        pthread_mutex_lock(&imgCopyMutex);
+        image_cap_time = ros::Time::now();
+        imgR.copyTo(imageR);
+        imgL.copyTo(imageL);
+        got_camera_frame = true;
+        pthread_mutex_unlock(&imgCopyMutex);
+    }
+
+    capLeft.release();
+    capRight.release();
+    return nullptr;
 }
+
 
 
 
